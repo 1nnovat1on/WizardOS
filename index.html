@@ -28,7 +28,7 @@
             border-radius: 8px;
             display: block; /* Removes bottom margin */
         }
-        #titleScreen {
+        .overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -44,12 +44,12 @@
             border-radius: 8px;
             z-index: 10;
         }
-        #titleScreen h1 {
+        .overlay h1 {
             font-size: 3rem;
             text-shadow: 3px 3px 0px #c0392b;
             margin-bottom: 2rem;
         }
-        #startButton {
+        .overlay button {
             font-family: 'Press Start 2P', cursive;
             background-color: #27ae60;
             color: white;
@@ -61,10 +61,10 @@
             transition: background-color 0.3s, transform 0.1s;
             box-shadow: 0 4px #2ecc71;
         }
-        #startButton:hover {
+        .overlay button:hover {
             background-color: #2ecc71;
         }
-        #startButton:active {
+        .overlay button:active {
             transform: translateY(2px);
             box-shadow: 0 2px #2ecc71;
         }
@@ -81,9 +81,13 @@
 </head>
 <body class="flex flex-col justify-center items-center">
     <div class="game-container" id="gameContainer">
-        <div id="titleScreen">
+        <div id="titleScreen" class="overlay">
             <h1>WizardOS</h1>
             <button id="startButton">Begin Adventure</button>
+        </div>
+        <div id="gameOverScreen" class="overlay" style="display: none;">
+            <h1>Game Over</h1>
+            <button id="endButton">END</button>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -106,6 +110,8 @@
         const ctx = canvas.getContext('2d');
         const titleScreen = document.getElementById('titleScreen');
         const startButton = document.getElementById('startButton');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const endButton = document.getElementById('endButton');
         const controlsDiv = document.querySelector('.controls');
         const gameContainer = document.getElementById('gameContainer');
 
@@ -173,7 +179,7 @@
 
         // --- Particle Class ---
         class Particle {
-            constructor(x, y, vx, vy, life, color, size, gravity, behavior) {
+            constructor(x, y, vx, vy, life, color, size, gravity, behavior, damage = 0, type = 'generic') {
                 this.x = x;
                 this.y = y;
                 this.vx = vx;
@@ -185,6 +191,8 @@
                 this.gravity = gravity;
                 this.behavior = behavior;
                 this.bounces = 0;
+                this.damage = damage;
+                this.type = type;
             }
             update() {
                 this.life--;
@@ -198,7 +206,11 @@
                         this.vy *= -0.4;
                         this.vx *= 0.8;
                         this.bounces++;
-                    } else {
+                    } else if (this.behavior === 'splinter') {
+                        this.vy *= -0.5;
+                        this.vx *= 0.5;
+                    }
+                    else {
                         this.vy = 0;
                         this.vx *= 0.7;
                     }
@@ -220,42 +232,166 @@
             }
         }
 
-        // --- Wizard Class ---
-        class Wizard {
-            constructor(game) {
+        // --- Base Entity Class ---
+        class Entity {
+            constructor(game, x, y, width, height) {
                 this.game = game;
-                this.width = 50;
-                this.height = 80;
-                this.x = 100;
-                this.y = GROUND_Y - this.height;
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.health = 100;
+                this.maxHealth = 100;
+                this.vx = 0;
+                this.vy = 0;
+            }
+
+            takeDamage(amount) {
+                this.health -= amount;
+                if (this.health < 0) this.health = 0;
+            }
+
+            applyKnockback(vx, vy) {
+                this.vx += vx;
+                this.vy += vy;
+            }
+
+            applyPhysics() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                this.vy += GRAVITY;
+                
+                // Ground collision and friction
+                if (this.y + this.height > GROUND_Y) {
+                    this.y = GROUND_Y - this.height;
+                    this.vy = 0;
+                    this.vx *= 0.9; // Ground friction
+                }
+
+                // Air friction
+                this.vx *= 0.98;
+                if (Math.abs(this.vx) < 0.1) this.vx = 0;
+            }
+        }
+
+        // --- Dummy Class ---
+        class Dummy extends Entity {
+            constructor(game, x, y) {
+                super(game, x, y, 40, 120);
+                this.spawnX = x;
+                this.spawnY = y;
+                this.isBurning = false;
+                this.saturation = 0;
+                this.burnTimer = 0;
+                this.fireParticles = [];
+                this.headRadius = 20;
+            }
+
+            update() {
+                this.applyPhysics();
+
+                // Handle burning effect
+                if (this.isBurning) {
+                    this.burnTimer++;
+                    if (this.burnTimer % 30 === 0) { // Damage every half second
+                        this.takeDamage(2);
+                    }
+                    // Add fire particles
+                    if (Math.random() < 0.5) {
+                        const fireX = this.x + Math.random() * this.width;
+                        const fireY = this.y + Math.random() * this.height;
+                        this.fireParticles.push(new Particle(fireX, fireY, (Math.random()-0.5), -Math.random()*2, 30, '#FF4500', 4, -0.05, 'flicker'));
+                    }
+                }
+                
+                // Update and filter fire particles
+                this.fireParticles = this.fireParticles.filter(p => {
+                    p.update();
+                    return p.life > 0;
+                });
+
+                // Dry out over time
+                if (this.saturation > 0) {
+                    this.saturation -= 0.2;
+                } else {
+                    this.saturation = 0;
+                }
+
+                if (this.health <= 0) {
+                    this.respawn();
+                }
+            }
+
+            respawn() {
+                this.health = this.maxHealth;
+                const randomOffset = (Math.random() * 300) + 200; // 200 to 500 pixels away
+                this.x = this.game.obelisk.x + randomOffset;
+                this.y = this.spawnY;
+                this.isBurning = false;
+                this.saturation = 0;
+                this.fireParticles = [];
+            }
+
+            draw(ctx) {
+                // Main body
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(this.x + this.width / 2 - 5, this.y, 10, this.height);
+                ctx.fillRect(this.x, this.y + 20, this.width, 10);
+                ctx.fillStyle = '#D2B48C';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y, this.headRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw fire particles
+                this.fireParticles.forEach(p => p.draw(ctx));
+
+                // Draw wet overlay
+                if (this.saturation > 0) {
+                    ctx.globalAlpha = this.saturation / 200; // Max alpha 0.5
+                    ctx.fillStyle = '#87CEFA';
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    ctx.globalAlpha = 1.0;
+                }
+
+                // Health Bar
+                const barWidth = 60;
+                const barHeight = 8;
+                const barX = this.x + (this.width / 2) - (barWidth / 2);
+                const barY = this.y - 30;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(barX, barY, barWidth * (this.health / this.maxHealth), barHeight);
+            }
+        }
+
+        // --- Wizard Class ---
+        class Wizard extends Entity {
+            constructor(game) {
+                super(game, 100, GROUND_Y - 80, 50, 80);
                 this.speed = 5;
                 this.velocityY = 0;
                 this.jumpStrength = -15;
                 this.isJumping = false;
                 this.direction = 1;
-                this.spellAngle = 0; // Current angle for spells
-                this.maxAngle = Math.PI / 2; // 90 degrees down
-                this.minAngle = -Math.PI / 2; // -90 degrees (straight up)
+                this.spellAngle = 0;
+                this.maxAngle = Math.PI / 2;
+                this.minAngle = -Math.PI / 2;
                 this.lastEarthSpellTime = 0;
                 this.lastAirSpellTime = 0;
                 this.singleShotCooldown = 400;
             }
             update(input) {
                 // Movement
-                if (input.keys['ArrowRight']) {
-                    this.x += this.speed;
-                    this.direction = 1;
-                } else if (input.keys['ArrowLeft']) {
-                    this.x -= this.speed;
-                    this.direction = -1;
-                }
+                if (input.keys['ArrowRight']) this.x += this.speed;
+                if (input.keys['ArrowLeft']) this.x -= this.speed;
+                if (input.keys['ArrowRight']) this.direction = 1;
+                if (input.keys['ArrowLeft']) this.direction = -1;
+                
                 // Aiming
-                if (input.keys['ArrowUp']) {
-                    this.spellAngle -= 0.05;
-                } else if (input.keys['ArrowDown']) {
-                    this.spellAngle += 0.05;
-                }
-                // Clamp the angle
+                if (input.keys['ArrowUp']) this.spellAngle -= 0.05;
+                if (input.keys['ArrowDown']) this.spellAngle += 0.05;
                 this.spellAngle = Math.max(this.minAngle, Math.min(this.maxAngle, this.spellAngle));
 
                 // Jumping
@@ -285,19 +421,21 @@
                     this.velocityY = 0;
                     this.isJumping = false;
                 }
+
+                if (this.health <= 0) {
+                    this.game.setGameState('GAME_OVER');
+                }
             }
             draw(ctx) {
-                // Staff
+                // Staff and character drawing code... (omitted for brevity, no changes)
                 ctx.fillStyle = '#8B4513';
                 const staffX = this.direction === 1 ? this.x + this.width - 5 : this.x - 5;
                 const staffY = this.y - 10;
                 ctx.fillRect(staffX, staffY, 10, this.height + 10);
-                // Staff Orb
                 ctx.beginPath();
                 ctx.arc(staffX + 5, staffY - 5, 8, 0, Math.PI * 2);
                 ctx.fillStyle = '#4169E1';
                 ctx.fill();
-                // Robe
                 ctx.fillStyle = '#483D8B';
                 ctx.beginPath();
                 ctx.moveTo(this.x, this.y + this.height);
@@ -306,12 +444,10 @@
                 ctx.lineTo(this.x + this.width * 0.25, this.y + this.height * 0.2);
                 ctx.closePath();
                 ctx.fill();
-                // Head
                 ctx.fillStyle = '#F5DEB3';
                 ctx.beginPath();
                 ctx.arc(this.x + this.width / 2, this.y + 15, 15, 0, Math.PI * 2);
                 ctx.fill();
-                // Beard
                 ctx.fillStyle = '#FFFFFF';
                 ctx.beginPath();
                 ctx.moveTo(this.x + this.width / 2 - 12, this.y + 18);
@@ -319,7 +455,6 @@
                 ctx.lineTo(this.x + this.width / 2, this.y + 45);
                 ctx.closePath();
                 ctx.fill();
-                // Hat
                 ctx.fillStyle = '#6A5ACD';
                 ctx.beginPath();
                 ctx.moveTo(this.x + this.width / 2, this.y - 20);
@@ -331,7 +466,6 @@
             castSpell(spellType) {
                 const staffTipX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
                 const staffTipY = this.y - 15;
-
                 switch(spellType) {
                     case 'water':
                         for (let i = 0; i < 5; i++) {
@@ -340,7 +474,7 @@
                             const angle = this.spellAngle + spread;
                             const vx = Math.cos(angle) * speed * this.direction;
                             const vy = Math.sin(angle) * speed;
-                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 150, '#87CEFA', 4, GRAVITY, 'default'));
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 150, '#87CEFA', 4, GRAVITY, 'default', 0, 'water'));
                         }
                         break;
                     case 'fire':
@@ -350,14 +484,14 @@
                             const angle = this.spellAngle + spread;
                             const vx = Math.cos(angle) * speed * this.direction;
                             const vy = Math.sin(angle) * speed;
-                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 60, '#FF4500', 5, -0.1, 'flicker'));
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 60, '#FF4500', 5, -0.1, 'flicker', 1, 'fire'));
                         }
                         break;
                     case 'earth':
                         const speedEarth = 12;
                         const vxEarth = Math.cos(this.spellAngle) * speedEarth * this.direction;
-                        const vyEarth = Math.sin(this.spellAngle) * speedEarth - 4; // Added base upward velocity
-                        this.game.particles.push(new Particle(staffTipX, staffTipY, vxEarth, vyEarth, 200, '#8B4513', 15, GRAVITY * 1.5, 'roll'));
+                        const vyEarth = Math.sin(this.spellAngle) * speedEarth - 4;
+                        this.game.particles.push(new Particle(staffTipX, staffTipY, vxEarth, vyEarth, 200, '#8B4513', 15, GRAVITY * 1.5, 'roll', 25, 'earth'));
                         break;
                     case 'air':
                         for (let i = 0; i < 30; i++) {
@@ -366,7 +500,7 @@
                             const angle = this.spellAngle + spread;
                             const vx = Math.cos(angle) * speed * this.direction;
                             const vy = Math.sin(angle) * speed;
-                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 80, '#F5F5F5', 4, 0, 'flutter'));
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 80, '#F5F5F5', 4, 0, 'flutter', 0.1, 'air'));
                         }
                         break;
                 }
@@ -380,52 +514,162 @@
                 this.height = height;
                 this.gameState = 'TITLE';
                 this.input = new InputHandler();
+                this.init();
+            }
+
+            init() {
                 this.player = new Wizard(this);
                 this.camera = new Camera(this.player, this.width);
                 this.obelisk = new Obelisk(0, GROUND_Y);
+                this.dummy = new Dummy(this, 250, GROUND_Y - 120);
                 this.particles = [];
+                this.entities = [this.player, this.dummy];
             }
+
             update() {
                 if (this.gameState !== 'PLAYING') return;
-                this.player.update(this.input);
+
+                this.entities.forEach(entity => entity.update?.(this.input));
                 this.camera.update();
+
+                // Particle updates and collision
                 this.particles = this.particles.filter(p => {
                     p.update();
+                    
+                    const dummy = this.dummy;
+                    let hit = false;
+
+                    // 1. Check collision with rectangular body
+                    const hitBody = (p.x > dummy.x && p.x < dummy.x + dummy.width &&
+                                     p.y > dummy.y && p.y < dummy.y + dummy.height);
+
+                    // 2. Check collision with circular head
+                    const headCenterX = dummy.x + dummy.width / 2;
+                    const headCenterY = dummy.y;
+                    const dx = p.x - headCenterX;
+                    const dy = p.y - headCenterY;
+                    const distanceSquared = dx * dx + dy * dy;
+                    const hitHead = distanceSquared < dummy.headRadius * dummy.headRadius;
+
+                    if (hitBody || hitHead) {
+                        this.handleSpellCollision(p, dummy);
+                        if (p.type !== 'earth') p.life = 0;
+                    } 
+                    
+                    else if (p.type === 'earth' && p.y + p.size >= GROUND_Y) {
+                        // Shatter earth particle on ground hit
+                        this.shatterParticle(p);
+                        p.life = 0;
+                    }
                     return p.life > 0;
                 });
             }
+
+            handleSpellCollision(particle, entity) {
+                entity.takeDamage(particle.damage);
+                
+                switch(particle.type) {
+                    case 'water':
+                        entity.applyKnockback(particle.vx * 0.02, particle.vy * 0.02);
+                        entity.saturation = Math.min(100, entity.saturation + 5);
+                        if (entity.isBurning) {
+                            // Extinguish fire particles
+                            entity.fireParticles.splice(0, 5);
+                            if (entity.fireParticles.length === 0) {
+                                entity.isBurning = false;
+                            }
+                        }
+                        break;
+                    case 'fire':
+                        if (entity.saturation <= 0) { // Can't catch fire if wet
+                           entity.isBurning = true;
+                        }
+                        break;
+                    case 'earth':
+                        entity.applyKnockback(particle.vx * 0.5, particle.vy * 0.5 - 5);
+                        this.shatterParticle(particle);
+                        particle.life = 0;
+                        break;
+                    case 'air':
+                        entity.applyKnockback(particle.vx * 0.2, particle.vy * 0.2);
+                        break;
+                }
+            }
+
+            shatterParticle(particle) {
+                for (let i = 0; i < 5; i++) {
+                    const vx = (Math.random() - 0.5) * 5 + particle.vx * 0.2;
+                    const vy = (Math.random() - 0.5) * 5 - 3;
+                    this.particles.push(new Particle(particle.x, particle.y, vx, vy, 50, '#A0522D', 5, GRAVITY, 'splinter'));
+                }
+            }
+
             draw(ctx) {
                 ctx.save();
                 ctx.translate(-this.camera.x, -this.camera.y);
                 
+                // Draw world objects
                 ctx.fillStyle = '#2c522c';
-                ctx.fillRect(this.camera.x, GROUND_Y, this.width, GAME_HEIGHT - GROUND_Y);
-
+                ctx.fillRect(this.camera.x - 1000, GROUND_Y, this.width + 2000, GAME_HEIGHT - GROUND_Y);
                 this.obelisk.draw(ctx);
-                
-                this.player.draw(ctx);
+                this.entities.forEach(entity => entity.draw(ctx));
                 this.particles.forEach(p => p.draw(ctx));
                 
                 ctx.restore();
+
+                // Draw UI elements (fixed on screen)
+                this.drawUI(ctx);
+            }
+
+            drawUI(ctx) {
+                // Player Health Bar
+                const barWidth = 200;
+                const barHeight = 20;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(10, 10, barWidth, barHeight);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(10, 10, barWidth * (this.player.health / this.player.maxHealth), barHeight);
+                ctx.fillStyle = 'white';
+                ctx.font = '12px "Courier New"';
+                ctx.fillText(`${this.player.health}/${this.player.maxHealth}`, 15, 25);
+            }
+
+            setGameState(newState) {
+                this.gameState = newState;
+                if (newState === 'GAME_OVER') {
+                    gameOverScreen.style.display = 'flex';
+                    controlsDiv.classList.add('hidden');
+                }
+                if (newState === 'TITLE') {
+                    titleScreen.style.display = 'flex';
+                    gameOverScreen.style.display = 'none';
+                }
+                if (newState === 'PLAYING') {
+                    this.init(); // Reset the game
+                    titleScreen.style.display = 'none';
+                    controlsDiv.classList.remove('hidden');
+                }
             }
         }
 
         // --- Main Game Logic ---
-        const game = new Game(GAME_WIDTH, GAME_HEIGHT);
+        let game = new Game(GAME_WIDTH, GAME_HEIGHT);
 
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            game.update();
             if (game.gameState === 'PLAYING') {
+                game.update();
                 game.draw(ctx);
             }
             requestAnimationFrame(animate);
         }
 
         startButton.addEventListener('click', () => {
-            titleScreen.style.display = 'none';
-            controlsDiv.classList.remove('hidden');
-            game.gameState = 'PLAYING';
+            game.setGameState('PLAYING');
+        });
+        
+        endButton.addEventListener('click', () => {
+            game.setGameState('TITLE');
         });
 
         animate();
