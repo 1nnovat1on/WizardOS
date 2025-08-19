@@ -191,7 +191,8 @@
                 this.jumpStrength = -15;
                 this.isJumping = false;
                 this.direction = 1;
-                this.lastSingleShotTime = 0;
+                this.lastEarthSpellTime = 0; // Separate cooldown timer for Earth
+                this.lastAirSpellTime = 0;   // Separate cooldown timer for Air
                 this.singleShotCooldown = 400; // Cooldown for single-shot spells
             }
             update(input) {
@@ -216,14 +217,14 @@
                 if (input.keys['z']) this.castSpell('fire');
                 if (input.keys['x']) this.castSpell('water');
                 
-                // Single-Shot Spells (cast on key press with cooldown)
-                if (input.keys['c'] && currentTime - this.lastSingleShotTime > this.singleShotCooldown) {
+                // Single-Shot Spells (cast on key press with independent cooldowns)
+                if (input.keys['c'] && currentTime - this.lastEarthSpellTime > this.singleShotCooldown) {
                     this.castSpell('earth');
-                    this.lastSingleShotTime = currentTime;
+                    this.lastEarthSpellTime = currentTime;
                 }
-                if (input.keys['v'] && currentTime - this.lastSingleShotTime > this.singleShotCooldown) {
+                if (input.keys['v'] && currentTime - this.lastAirSpellTime > this.singleShotCooldown) {
                     this.castSpell('air');
-                    this.lastSingleShotTime = currentTime;
+                    this.lastAirSpellTime = currentTime;
                 }
                 
                 // Physics and Boundaries
