@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WizardOS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        .game-container {
+            position: relative;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2), 0 6px 6px rgba(0,0,0,0.25);
+            border-radius: 8px;
+        }
+        canvas {
+            background-color: #2c3e50;
+            border-radius: 8px;
+            display: block; /* Removes bottom margin */
+        }
+        #titleScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(44, 62, 80, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #ecf0f1;
+            font-family: 'Press Start 2P', cursive;
+            border-radius: 8px;
+            z-index: 10;
+        }
+        #titleScreen h1 {
+            font-size: 3rem;
+            text-shadow: 3px 3px 0px #c0392b;
+            margin-bottom: 2rem;
+        }
+        #startButton {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #27ae60;
+            color: white;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 4px #2ecc71;
+        }
+        #startButton:hover {
+            background-color: #2ecc71;
+        }
+        #startButton:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px #2ecc71;
+        }
+        .controls {
+            color: #ecf0f1;
+            margin-top: 20px;
+            text-align: center;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .controls p {
+            margin: 0.25rem 0;
+        }
+    </style>
+</head>
+<body class="flex flex-col justify-center items-center">
+    <div class="game-container" id="gameContainer">
+        <div id="titleScreen">
+            <h1>WizardOS</h1>
+            <button id="startButton">Begin Adventure</button>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+    <div class="controls hidden">
+        <p><kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">←</kbd> / <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">→</kbd> : Move | <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Space</kbd> : Jump</p>
+        <p>
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Z</kbd>: Fire |
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">X</kbd>: Water |
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">C</kbd>: Earth |
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">V</kbd>: Air
+        </p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const titleScreen = document.getElementById('titleScreen');
+        const startButton = document.getElementById('startButton');
+        const controlsDiv = document.querySelector('.controls');
+        const gameContainer = document.getElementById('gameContainer');
+
+        // --- Game Configuration ---
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 600;
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
+        gameContainer.style.width = `${GAME_WIDTH}px`;
+        gameContainer.style.height = `${GAME_HEIGHT}px`;
+
+        const GROUND_HEIGHT = 50;
+        const GRAVITY = 0.6;
+
+        // --- Input Handler Class ---
+        class InputHandler {
+            constructor() {
+                this.keys = {};
+                window.addEventListener('keydown', e => { this.keys[e.key] = true; });
+                window.addEventListener('keyup', e => { this.keys[e.key] = false; });
+            }
+        }
+
+        // --- Base Spell Class (Parent) ---
+        class Spell {
+            constructor(x, y, direction) {
+                this.x = x;
+                this.y = y;
+                this.radius = 8;
+                this.speed = 10;
+                this.direction = direction;
+                this.trail = [];
+                // Default colors, to be overridden by subclasses
+                this.color = 'white'; 
+                this.shadowColor = 'white';
+            }
+            update() {
+                this.x += this.speed * this.direction;
+                this.trail.push({ x: this.x, y: this.y, radius: this.radius });
+                if (this.trail.length > 10) {
+                    this.trail.shift();
+                }
+            }
+            draw(ctx) {
+                // Draw trail
+                for (let i = 0; i < this.trail.length; i++) {
+                    const particle = this.trail[i];
+                    const alpha = (i + 1) / this.trail.length * 0.5;
+                    const colorParts = this.color.match(/(\d+), (\d+), (\d+)/);
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.radius * (i / this.trail.length), 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${colorParts[1]}, ${colorParts[2]}, ${colorParts[3]}, ${alpha})`;
+                    ctx.fill();
+                }
+                // Draw main spell
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.shadowColor;
+                ctx.shadowBlur = 15;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        // --- Elemental Spell Subclasses ---
+        class WaterSpell extends Spell {
+            constructor(x, y, direction) {
+                super(x, y, direction);
+                this.color = 'rgba(137, 207, 240, 0.9)';
+                this.shadowColor = '#87CEFA';
+            }
+        }
+
+        class FireSpell extends Spell {
+            constructor(x, y, direction) {
+                super(x, y, direction);
+                this.color = 'rgba(255, 69, 0, 0.9)';
+                this.shadowColor = '#FF4500';
+            }
+        }
+
+        class EarthSpell extends Spell {
+            constructor(x, y, direction) {
+                super(x, y, direction);
+                this.color = 'rgba(34, 139, 34, 0.9)';
+                this.shadowColor = '#228B22';
+            }
+        }
+        
+        class AirSpell extends Spell {
+            constructor(x, y, direction) {
+                super(x, y, direction);
+                this.color = 'rgba(245, 245, 245, 0.9)';
+                this.shadowColor = '#FFFFFF';
+            }
+        }
+
+        // --- Wizard Class ---
+        class Wizard {
+            constructor(game) {
+                this.game = game;
+                this.width = 50;
+                this.height = 80;
+                this.x = 100;
+                this.y = this.game.height - GROUND_HEIGHT - this.height;
+                this.speed = 5;
+                this.velocityY = 0;
+                this.jumpStrength = -15;
+                this.isJumping = false;
+                this.direction = 1;
+                this.lastShotTime = 0;
+                this.shootCooldown = 300;
+            }
+            update(input) {
+                // Movement
+                if (input.keys['ArrowRight']) {
+                    this.x += this.speed;
+                    this.direction = 1;
+                } else if (input.keys['ArrowLeft']) {
+                    this.x -= this.speed;
+                    this.direction = -1;
+                }
+                // Jumping
+                if (input.keys[' '] && !this.isJumping) {
+                    this.velocityY = this.jumpStrength;
+                    this.isJumping = true;
+                }
+                // Shooting Spells
+                if (input.keys['z']) this.shoot(FireSpell);
+                if (input.keys['x']) this.shoot(WaterSpell);
+                if (input.keys['c']) this.shoot(EarthSpell);
+                if (input.keys['v']) this.shoot(AirSpell);
+                
+                // Physics and Boundaries
+                this.y += this.velocityY;
+                this.velocityY += GRAVITY;
+                if (this.y + this.height > this.game.height - GROUND_HEIGHT) {
+                    this.y = this.game.height - GROUND_HEIGHT - this.height;
+                    this.velocityY = 0;
+                    this.isJumping = false;
+                }
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > this.game.width) this.x = this.game.width - this.width;
+            }
+            draw(ctx) {
+                // Staff
+                ctx.fillStyle = '#8B4513';
+                const staffX = this.direction === 1 ? this.x + this.width - 5 : this.x - 5;
+                ctx.fillRect(staffX, this.y - 10, 10, this.height + 10);
+                // Staff Orb
+                ctx.beginPath();
+                ctx.arc(staffX + 5, this.y - 15, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#4169E1';
+                ctx.fill();
+                // Robe
+                ctx.fillStyle = '#483D8B';
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y + this.height);
+                ctx.lineTo(this.x + this.width, this.y + this.height);
+                ctx.lineTo(this.x + this.width * 0.75, this.y + this.height * 0.2);
+                ctx.lineTo(this.x + this.width * 0.25, this.y + this.height * 0.2);
+                ctx.closePath();
+                ctx.fill();
+                // Head
+                ctx.fillStyle = '#F5DEB3';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y + 15, 15, 0, Math.PI * 2);
+                ctx.fill();
+                // Beard
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2 - 12, this.y + 18);
+                ctx.lineTo(this.x + this.width / 2 + 12, this.y + 18);
+                ctx.lineTo(this.x + this.width / 2, this.y + 45);
+                ctx.closePath();
+                ctx.fill();
+                // Hat
+                ctx.fillStyle = '#6A5ACD';
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width / 2, this.y - 20);
+                ctx.lineTo(this.x + this.width / 2 - 25, this.y + 10);
+                ctx.lineTo(this.x + this.width / 2 + 25, this.y + 10);
+                ctx.closePath();
+                ctx.fill();
+            }
+            shoot(SpellType) {
+                const currentTime = Date.now();
+                if (currentTime - this.lastShotTime > this.shootCooldown) {
+                    const staffTipX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
+                    const staffTipY = this.y - 15;
+                    this.game.spells.push(new SpellType(staffTipX, staffTipY, this.direction));
+                    this.lastShotTime = currentTime;
+                }
+            }
+        }
+
+        // --- Game Class ---
+        class Game {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+                this.gameState = 'TITLE';
+                this.input = new InputHandler();
+                this.player = new Wizard(this);
+                this.spells = [];
+            }
+            update() {
+                if (this.gameState !== 'PLAYING') return;
+                this.player.update(this.input);
+                this.spells.forEach((spell, index) => {
+                    spell.update();
+                    if (spell.x > this.width || spell.x < 0) {
+                        this.spells.splice(index, 1);
+                    }
+                });
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#2c522c';
+                ctx.fillRect(0, this.height - GROUND_HEIGHT, this.width, GROUND_HEIGHT);
+                this.player.draw(ctx);
+                this.spells.forEach(spell => spell.draw(ctx));
+            }
+        }
+
+        // --- Main Game Logic ---
+        const game = new Game(GAME_WIDTH, GAME_HEIGHT);
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            game.update();
+            if (game.gameState === 'PLAYING') {
+                game.draw(ctx);
+            }
+            requestAnimationFrame(animate);
+        }
+
+        startButton.addEventListener('click', () => {
+            titleScreen.style.display = 'none';
+            controlsDiv.classList.remove('hidden');
+            game.gameState = 'PLAYING';
+        });
+
+        animate();
+    </script>
+</body>
+</html>
