@@ -90,8 +90,8 @@
     <div class="controls hidden">
         <p><kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">←</kbd> / <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">→</kbd> : Move | <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Space</kbd> : Jump</p>
         <p>
-            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Z</kbd>: Fire |
-            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">X</kbd>: Water |
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">Z</kbd>: Fire (Hold) |
+            <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">X</kbd>: Water (Hold) |
             <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">C</kbd>: Earth |
             <kbd class="px-2 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 border border-gray-200 rounded-lg">V</kbd>: Air
         </p>
@@ -113,8 +113,8 @@
         gameContainer.style.width = `${GAME_WIDTH}px`;
         gameContainer.style.height = `${GAME_HEIGHT}px`;
 
-        const GROUND_HEIGHT = 50;
-        const GRAVITY = 0.6;
+        const GROUND_Y = GAME_HEIGHT - 50;
+        const GRAVITY = 0.4;
 
         // --- Input Handler Class ---
         class InputHandler {
@@ -125,78 +125,56 @@
             }
         }
 
-        // --- Base Spell Class (Parent) ---
-        class Spell {
-            constructor(x, y, direction) {
+        // --- Particle Class ---
+        class Particle {
+            constructor(x, y, vx, vy, life, color, size, gravity, behavior) {
                 this.x = x;
                 this.y = y;
-                this.radius = 8;
-                this.speed = 10;
-                this.direction = direction;
-                this.trail = [];
-                // Default colors, to be overridden by subclasses
-                this.color = 'white'; 
-                this.shadowColor = 'white';
+                this.vx = vx;
+                this.vy = vy;
+                this.life = life;
+                this.maxLife = life;
+                this.color = color;
+                this.size = size;
+                this.gravity = gravity;
+                this.behavior = behavior; // 'default', 'flicker', 'flutter', 'roll'
+                this.bounces = 0;
             }
+
             update() {
-                this.x += this.speed * this.direction;
-                this.trail.push({ x: this.x, y: this.y, radius: this.radius });
-                if (this.trail.length > 10) {
-                    this.trail.shift();
+                this.life--;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += this.gravity;
+
+                // Ground collision
+                if (this.y + this.size > GROUND_Y) {
+                    this.y = GROUND_Y - this.size;
+                    if (this.behavior === 'roll' && this.bounces < 2) {
+                        this.vy *= -0.4; // Bounce
+                        this.vx *= 0.8; // Friction
+                        this.bounces++;
+                    } else {
+                        this.vy = 0;
+                        this.vx *= 0.7; // Friction
+                    }
+                }
+                
+                // Behavior-specific updates
+                if (this.behavior === 'flutter') {
+                    this.x += (Math.random() - 0.5) * 2;
                 }
             }
+
             draw(ctx) {
-                // Draw trail
-                for (let i = 0; i < this.trail.length; i++) {
-                    const particle = this.trail[i];
-                    const alpha = (i + 1) / this.trail.length * 0.5;
-                    const colorParts = this.color.match(/(\d+), (\d+), (\d+)/);
-                    ctx.beginPath();
-                    ctx.arc(particle.x, particle.y, particle.radius * (i / this.trail.length), 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(${colorParts[1]}, ${colorParts[2]}, ${colorParts[3]}, ${alpha})`;
-                    ctx.fill();
+                let alpha = this.life / this.maxLife;
+                if (this.behavior === 'flicker') {
+                    alpha *= Math.random() * 0.5 + 0.5;
                 }
-                // Draw main spell
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.globalAlpha = alpha;
                 ctx.fillStyle = this.color;
-                ctx.shadowColor = this.shadowColor;
-                ctx.shadowBlur = 15;
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-        }
-
-        // --- Elemental Spell Subclasses ---
-        class WaterSpell extends Spell {
-            constructor(x, y, direction) {
-                super(x, y, direction);
-                this.color = 'rgba(137, 207, 240, 0.9)';
-                this.shadowColor = '#87CEFA';
-            }
-        }
-
-        class FireSpell extends Spell {
-            constructor(x, y, direction) {
-                super(x, y, direction);
-                this.color = 'rgba(255, 69, 0, 0.9)';
-                this.shadowColor = '#FF4500';
-            }
-        }
-
-        class EarthSpell extends Spell {
-            constructor(x, y, direction) {
-                super(x, y, direction);
-                this.color = 'rgba(34, 139, 34, 0.9)';
-                this.shadowColor = '#228B22';
-            }
-        }
-        
-        class AirSpell extends Spell {
-            constructor(x, y, direction) {
-                super(x, y, direction);
-                this.color = 'rgba(245, 245, 245, 0.9)';
-                this.shadowColor = '#FFFFFF';
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+                ctx.globalAlpha = 1.0;
             }
         }
 
@@ -207,14 +185,14 @@
                 this.width = 50;
                 this.height = 80;
                 this.x = 100;
-                this.y = this.game.height - GROUND_HEIGHT - this.height;
+                this.y = GROUND_Y - this.height;
                 this.speed = 5;
                 this.velocityY = 0;
                 this.jumpStrength = -15;
                 this.isJumping = false;
                 this.direction = 1;
-                this.lastShotTime = 0;
-                this.shootCooldown = 300;
+                this.lastSingleShotTime = 0;
+                this.singleShotCooldown = 400; // Cooldown for single-shot spells
             }
             update(input) {
                 // Movement
@@ -230,17 +208,29 @@
                     this.velocityY = this.jumpStrength;
                     this.isJumping = true;
                 }
-                // Shooting Spells
-                if (input.keys['z']) this.shoot(FireSpell);
-                if (input.keys['x']) this.shoot(WaterSpell);
-                if (input.keys['c']) this.shoot(EarthSpell);
-                if (input.keys['v']) this.shoot(AirSpell);
+
+                // --- Spell Casting Logic ---
+                const currentTime = Date.now();
+
+                // Continuous Spells (no cooldown, cast while key is held)
+                if (input.keys['z']) this.castSpell('fire');
+                if (input.keys['x']) this.castSpell('water');
+                
+                // Single-Shot Spells (cast on key press with cooldown)
+                if (input.keys['c'] && currentTime - this.lastSingleShotTime > this.singleShotCooldown) {
+                    this.castSpell('earth');
+                    this.lastSingleShotTime = currentTime;
+                }
+                if (input.keys['v'] && currentTime - this.lastSingleShotTime > this.singleShotCooldown) {
+                    this.castSpell('air');
+                    this.lastSingleShotTime = currentTime;
+                }
                 
                 // Physics and Boundaries
                 this.y += this.velocityY;
                 this.velocityY += GRAVITY;
-                if (this.y + this.height > this.game.height - GROUND_HEIGHT) {
-                    this.y = this.game.height - GROUND_HEIGHT - this.height;
+                if (this.y + this.height > GROUND_Y) {
+                    this.y = GROUND_Y - this.height;
                     this.velocityY = 0;
                     this.isJumping = false;
                 }
@@ -288,13 +278,47 @@
                 ctx.closePath();
                 ctx.fill();
             }
-            shoot(SpellType) {
-                const currentTime = Date.now();
-                if (currentTime - this.lastShotTime > this.shootCooldown) {
-                    const staffTipX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
-                    const staffTipY = this.y - 15;
-                    this.game.spells.push(new SpellType(staffTipX, staffTipY, this.direction));
-                    this.lastShotTime = currentTime;
+            castSpell(spellType) {
+                const staffTipX = this.direction === 1 ? this.x + this.width + 5 : this.x - 5;
+                const staffTipY = this.y - 15;
+
+                switch(spellType) {
+                    case 'water':
+                        // Continuous stream - fewer particles per frame, but called every frame
+                        for (let i = 0; i < 5; i++) {
+                            const speed = Math.random() * 5 + 5;
+                            const angle = (Math.random() - 0.5) * 0.5;
+                            const vx = Math.cos(angle) * speed * this.direction;
+                            const vy = Math.sin(angle) * speed;
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 150, '#87CEFA', 4, GRAVITY, 'default'));
+                        }
+                        break;
+                    case 'fire':
+                        // Continuous stream
+                        for (let i = 0; i < 4; i++) {
+                            const speed = Math.random() * 6 + 6;
+                            const angle = (Math.random() - 0.5) * 0.3;
+                            const vx = Math.cos(angle) * speed * this.direction;
+                            const vy = Math.sin(angle) * speed;
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 60, '#FF4500', 5, -0.1, 'flicker'));
+                        }
+                        break;
+                    case 'earth':
+                        // Single shot
+                        const vxEarth = 12 * this.direction;
+                        const vyEarth = -8;
+                        this.game.particles.push(new Particle(staffTipX, staffTipY, vxEarth, vyEarth, 200, '#8B4513', 15, GRAVITY * 1.5, 'roll'));
+                        break;
+                    case 'air':
+                        // Single shot
+                        for (let i = 0; i < 30; i++) {
+                            const speed = Math.random() * 8 + 2;
+                            const angle = (Math.random() - 0.5) * Math.PI * 0.5;
+                            const vx = Math.cos(angle) * speed * this.direction;
+                            const vy = Math.sin(angle) * speed;
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 80, '#F5F5F5', 4, 0, 'flutter'));
+                        }
+                        break;
                 }
             }
         }
@@ -307,23 +331,24 @@
                 this.gameState = 'TITLE';
                 this.input = new InputHandler();
                 this.player = new Wizard(this);
-                this.spells = [];
+                this.particles = [];
             }
             update() {
                 if (this.gameState !== 'PLAYING') return;
                 this.player.update(this.input);
-                this.spells.forEach((spell, index) => {
-                    spell.update();
-                    if (spell.x > this.width || spell.x < 0) {
-                        this.spells.splice(index, 1);
-                    }
+                // Update particles and remove dead ones
+                this.particles = this.particles.filter(p => {
+                    p.update();
+                    return p.life > 0;
                 });
             }
             draw(ctx) {
+                // Draw ground
                 ctx.fillStyle = '#2c522c';
-                ctx.fillRect(0, this.height - GROUND_HEIGHT, this.width, GROUND_HEIGHT);
+                ctx.fillRect(0, GROUND_Y, this.width, GAME_HEIGHT - GROUND_Y);
+                // Draw player and particles
                 this.player.draw(ctx);
-                this.spells.forEach(spell => spell.draw(ctx));
+                this.particles.forEach(p => p.draw(ctx));
             }
         }
 
