@@ -24,7 +24,7 @@
             border-radius: 8px;
         }
         canvas {
-            background-color: #2c3e50;
+            /* background-color removed to allow dynamic sky */
             border-radius: 8px;
             display: block; /* Removes bottom margin */
         }
@@ -188,6 +188,8 @@
                 this.maxLife = life;
                 this.color = color;
                 this.size = size;
+                this.width = size;
+                this.height = size;
                 this.gravity = gravity;
                 this.behavior = behavior;
                 this.bounces = 0;
@@ -226,8 +228,14 @@
                     alpha *= Math.random() * 0.5 + 0.5;
                 }
                 ctx.globalAlpha = alpha;
+                
                 ctx.fillStyle = this.color;
                 ctx.fillRect(this.x, this.y, this.size, this.size);
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(this.x, this.y, this.size, this.size);
+
                 ctx.globalAlpha = 1.0;
             }
         }
@@ -262,18 +270,178 @@
 
                 this.vy += GRAVITY;
                 
-                // Ground collision and friction
                 if (this.y + this.height > GROUND_Y) {
                     this.y = GROUND_Y - this.height;
                     this.vy = 0;
-                    this.vx *= 0.9; // Ground friction
+                    this.vx *= 0.9; 
                 }
 
-                // Air friction
                 this.vx *= 0.98;
                 if (Math.abs(this.vx) < 0.1) this.vx = 0;
             }
         }
+        
+        // --- Boulder Class ---
+        class Boulder extends Entity {
+            constructor(game, x, y, vx, vy) {
+                super(game, x, y, 15, 15);
+                this.vx = vx;
+                this.vy = vy;
+                this.health = 50;
+                this.maxHealth = 50;
+                this.isWet = false;
+                this.wetTimer = 0;
+                this.isStuck = false;
+            }
+
+            update() {
+                if (this.isStuck) {
+                    this.vx = 0;
+                    this.vy = 0;
+                    return;
+                }
+
+                this.applyPhysics();
+
+                if (this.isWet) {
+                    this.wetTimer++;
+                    if (this.wetTimer > 300) {
+                        this.isWet = false;
+                        this.wetTimer = 0;
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.isWet ? '#654321' : '#8B4513';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // --- Tree Class ---
+        class Tree extends Entity {
+            constructor(game, x) {
+                super(game, x, GROUND_Y, 20, 0); // Start with 0 height
+                this.age = 0;
+                this.maxAge = 15 * game.dayCycleDuration; // 15 in-game days
+                this.stage = 'sapling'; // sapling, mature, dead, collapsing
+                this.isBurning = false;
+                this.fireParticles = [];
+                this.burnTimer = 0;
+                this.isAlive = true;
+                this.collapseTimer = 0;
+                this.maxCollapseTime = 2000; // 2 seconds to disappear
+            }
+
+            update(deltaTime) {
+                if (!this.isAlive) return;
+
+                if (this.stage !== 'collapsing') {
+                    this.age += deltaTime;
+                    if (this.isBurning) {
+                        this.age += deltaTime * 10; // Burning accelerates aging by 10x
+                    }
+                }
+
+                // Stage transitions
+                if (this.age >= this.maxAge) {
+                    this.stage = 'collapsing';
+                } else if (this.age > this.maxAge * 0.66) {
+                    this.stage = 'dead';
+                } else if (this.age > this.maxAge * 0.33) {
+                    this.stage = 'mature';
+                } else {
+                    this.stage = 'sapling';
+                }
+
+                if (this.stage === 'collapsing') {
+                    this.collapseTimer += deltaTime;
+                    if (this.collapseTimer >= this.maxCollapseTime) {
+                        this.isAlive = false;
+                    }
+                    return; // Skip other updates if collapsing
+                }
+
+                // Update height based on stage
+                let targetHeight;
+                const fullGrownHeight = 200;
+                if (this.stage === 'sapling') {
+                    targetHeight = fullGrownHeight * (this.age / (this.maxAge * 0.33));
+                } else {
+                    targetHeight = fullGrownHeight;
+                }
+                this.height = targetHeight;
+                this.y = GROUND_Y - this.height;
+
+                // Handle burning
+                if (this.isBurning) {
+                    this.burnTimer++;
+                    if (this.burnTimer % 15 === 0 && Math.random() < 0.1) {
+                        this.game.spreadFire(this);
+                    }
+                    if (Math.random() < 0.8) {
+                        const fireX = this.x + (Math.random() - 0.5) * this.width;
+                        const fireY = this.y + Math.random() * this.height;
+                        this.fireParticles.push(new Particle(fireX, fireY, (Math.random()-0.5), -Math.random()*2, 40, '#FF4500', 6, -0.05, 'flicker'));
+                    }
+                }
+                this.fireParticles = this.fireParticles.filter(p => {
+                    p.update();
+                    return p.life > 0;
+                });
+            }
+
+            catchFire() {
+                if (this.stage === 'mature' && !this.isBurning) {
+                    this.isBurning = true;
+                }
+            }
+
+            extinguish() {
+                this.isBurning = false;
+                this.fireParticles = [];
+            }
+
+            draw(ctx) {
+                if (this.stage === 'collapsing') {
+                    ctx.globalAlpha = 1 - (this.collapseTimer / this.maxCollapseTime);
+                }
+
+                const trunkWidth = this.width * 0.5;
+                const trunkX = this.x + (this.width - trunkWidth) / 2;
+                
+                // Draw Trunk
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(trunkX, this.y, trunkWidth, this.height);
+
+                // Draw Leaves/Branches based on stage
+                if (this.stage === 'sapling') {
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width / 2, this.y, this.width * 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.stage === 'mature') {
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + this.width / 2, this.y, this.width * 2, this.height * 0.5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.stage === 'dead' || this.stage === 'collapsing') {
+                    ctx.strokeStyle = '#5C4033';
+                    ctx.lineWidth = 2;
+                    for (let i = 0; i < 5; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(trunkX + trunkWidth / 2, this.y + this.height * 0.5);
+                        ctx.lineTo(this.x + (Math.random() - 0.5) * 50, this.y + Math.random() * this.height * 0.5);
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw fire
+                this.fireParticles.forEach(p => p.draw(ctx));
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
 
         // --- Dummy Class ---
         class Dummy extends Entity {
@@ -291,13 +459,11 @@
             update() {
                 this.applyPhysics();
 
-                // Handle burning effect
                 if (this.isBurning) {
                     this.burnTimer++;
-                    if (this.burnTimer % 30 === 0) { // Damage every half second
+                    if (this.burnTimer % 30 === 0) {
                         this.takeDamage(2);
                     }
-                    // Add fire particles
                     if (Math.random() < 0.5) {
                         const fireX = this.x + Math.random() * this.width;
                         const fireY = this.y + Math.random() * this.height;
@@ -305,13 +471,11 @@
                     }
                 }
                 
-                // Update and filter fire particles
                 this.fireParticles = this.fireParticles.filter(p => {
                     p.update();
                     return p.life > 0;
                 });
 
-                // Dry out over time
                 if (this.saturation > 0) {
                     this.saturation -= 0.2;
                 } else {
@@ -325,7 +489,7 @@
 
             respawn() {
                 this.health = this.maxHealth;
-                const randomOffset = (Math.random() * 300) + 200; // 200 to 500 pixels away
+                const randomOffset = (Math.random() * 300) + 200;
                 this.x = this.game.obelisk.x + randomOffset;
                 this.y = this.spawnY;
                 this.isBurning = false;
@@ -334,7 +498,6 @@
             }
 
             draw(ctx) {
-                // Main body
                 ctx.fillStyle = '#8B4513';
                 ctx.fillRect(this.x + this.width / 2 - 5, this.y, 10, this.height);
                 ctx.fillRect(this.x, this.y + 20, this.width, 10);
@@ -343,18 +506,15 @@
                 ctx.arc(this.x + this.width / 2, this.y, this.headRadius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Draw fire particles
                 this.fireParticles.forEach(p => p.draw(ctx));
 
-                // Draw wet overlay
                 if (this.saturation > 0) {
-                    ctx.globalAlpha = this.saturation / 200; // Max alpha 0.5
+                    ctx.globalAlpha = this.saturation / 200;
                     ctx.fillStyle = '#87CEFA';
                     ctx.fillRect(this.x, this.y, this.width, this.height);
                     ctx.globalAlpha = 1.0;
                 }
 
-                // Health Bar
                 const barWidth = 60;
                 const barHeight = 8;
                 const barX = this.x + (this.width / 2) - (barWidth / 2);
@@ -371,7 +531,6 @@
             constructor(game) {
                 super(game, 100, GROUND_Y - 80, 50, 80);
                 this.speed = 5;
-                this.velocityY = 0;
                 this.jumpStrength = -15;
                 this.isJumping = false;
                 this.direction = 1;
@@ -383,24 +542,23 @@
                 this.singleShotCooldown = 400;
             }
             update(input) {
-                // Movement
-                if (input.keys['ArrowRight']) this.x += this.speed;
-                if (input.keys['ArrowLeft']) this.x -= this.speed;
-                if (input.keys['ArrowRight']) this.direction = 1;
-                if (input.keys['ArrowLeft']) this.direction = -1;
+                if (input.keys['ArrowRight']) {
+                    this.x += this.speed;
+                    this.direction = 1;
+                } else if (input.keys['ArrowLeft']) {
+                    this.x -= this.speed;
+                    this.direction = -1;
+                }
                 
-                // Aiming
                 if (input.keys['ArrowUp']) this.spellAngle -= 0.05;
                 if (input.keys['ArrowDown']) this.spellAngle += 0.05;
                 this.spellAngle = Math.max(this.minAngle, Math.min(this.maxAngle, this.spellAngle));
 
-                // Jumping
                 if (input.keys[' '] && !this.isJumping) {
-                    this.velocityY = this.jumpStrength;
+                    this.vy = this.jumpStrength;
                     this.isJumping = true;
                 }
 
-                // Spell casting
                 const currentTime = Date.now();
                 if (input.keys['z']) this.castSpell('fire');
                 if (input.keys['x']) this.castSpell('water');
@@ -413,12 +571,9 @@
                     this.lastAirSpellTime = currentTime;
                 }
                 
-                // Physics
-                this.y += this.velocityY;
-                this.velocityY += GRAVITY;
-                if (this.y + this.height > GROUND_Y) {
-                    this.y = GROUND_Y - this.height;
-                    this.velocityY = 0;
+                this.applyPhysics();
+
+                if (this.y + this.height >= GROUND_Y) {
                     this.isJumping = false;
                 }
 
@@ -427,7 +582,7 @@
                 }
             }
             draw(ctx) {
-                // Staff and character drawing code... (omitted for brevity, no changes)
+                // ... (Wizard drawing code is unchanged)
                 ctx.fillStyle = '#8B4513';
                 const staffX = this.direction === 1 ? this.x + this.width - 5 : this.x - 5;
                 const staffY = this.y - 10;
@@ -474,7 +629,7 @@
                             const angle = this.spellAngle + spread;
                             const vx = Math.cos(angle) * speed * this.direction;
                             const vy = Math.sin(angle) * speed;
-                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 150, '#87CEFA', 4, GRAVITY, 'default', 0, 'water'));
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 150, '#00BFFF', 4, GRAVITY, 'default', 0, 'water'));
                         }
                         break;
                     case 'fire':
@@ -484,16 +639,22 @@
                             const angle = this.spellAngle + spread;
                             const vx = Math.cos(angle) * speed * this.direction;
                             const vy = Math.sin(angle) * speed;
-                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 60, '#FF4500', 5, -0.1, 'flicker', 1, 'fire'));
+                            this.game.particles.push(new Particle(staffTipX, staffTipY, vx, vy, 60, '#FF4500', 5, -0.1, 'flicker', 0.2, 'fire'));
                         }
                         break;
                     case 'earth':
                         const speedEarth = 12;
                         const vxEarth = Math.cos(this.spellAngle) * speedEarth * this.direction;
                         const vyEarth = Math.sin(this.spellAngle) * speedEarth - 4;
-                        this.game.particles.push(new Particle(staffTipX, staffTipY, vxEarth, vyEarth, 200, '#8B4513', 15, GRAVITY * 1.5, 'roll', 25, 'earth'));
+                        this.game.boulders.push(new Boulder(this.game, staffTipX, staffTipY, vxEarth, vyEarth));
                         break;
                     case 'air':
+                        if (this.isJumping) {
+                            const boostStrength = 8;
+                            const boostVx = -Math.cos(this.spellAngle) * boostStrength * this.direction;
+                            const boostVy = -Math.sin(this.spellAngle) * boostStrength;
+                            this.applyKnockback(boostVx, boostVy);
+                        }
                         for (let i = 0; i < 30; i++) {
                             const speed = Math.random() * 8 + 2;
                             const spread = (Math.random() - 0.5) * Math.PI * 0.5;
@@ -523,106 +684,227 @@
                 this.obelisk = new Obelisk(0, GROUND_Y);
                 this.dummy = new Dummy(this, 250, GROUND_Y - 120);
                 this.particles = [];
+                this.boulders = [];
+                this.trees = [];
                 this.entities = [this.player, this.dummy];
+                
+                this.dayCycleDuration = 5 * 60 * 1000;
+                this.timeOfDay = 0.25;
+                this.lastTimestamp = 0;
+                this.treeSpawnTimer = 0;
             }
 
-            update() {
+            update(timestamp) {
                 if (this.gameState !== 'PLAYING') return;
 
+                if (!this.lastTimestamp) this.lastTimestamp = timestamp;
+                const deltaTime = timestamp - this.lastTimestamp;
+                this.lastTimestamp = timestamp;
+                this.timeOfDay += deltaTime / this.dayCycleDuration;
+                if (this.timeOfDay >= 1) this.timeOfDay -= 1;
+
                 this.entities.forEach(entity => entity.update?.(this.input));
+                this.boulders.forEach(boulder => boulder.update());
+                this.trees.forEach(tree => tree.update(deltaTime));
                 this.camera.update();
 
-                // Particle updates and collision
+                // Tree Spawning
+                this.treeSpawnTimer += deltaTime;
+                if (this.treeSpawnTimer > 5000 && this.trees.length < 20) { // Try to spawn a tree every 5 seconds
+                    this.treeSpawnTimer = 0;
+                    if (Math.random() < 0.5) {
+                        const spawnX = this.camera.x + (Math.random() - 0.5) * (this.width * 2) + this.width / 2;
+                        this.trees.push(new Tree(this, spawnX));
+                    }
+                }
+
+                this.handleCollisions();
+
+                // Filter out dead objects
+                this.boulders = this.boulders.filter(b => b.health > 0);
+                this.trees = this.trees.filter(t => t.isAlive);
+            }
+
+            handleCollisions() {
+                // Particle collisions
                 this.particles = this.particles.filter(p => {
                     p.update();
                     
-                    const dummy = this.dummy;
-                    let hit = false;
-
-                    // 1. Check collision with rectangular body
-                    const hitBody = (p.x > dummy.x && p.x < dummy.x + dummy.width &&
-                                     p.y > dummy.y && p.y < dummy.y + dummy.height);
-
-                    // 2. Check collision with circular head
-                    const headCenterX = dummy.x + dummy.width / 2;
-                    const headCenterY = dummy.y;
-                    const dx = p.x - headCenterX;
-                    const dy = p.y - headCenterY;
-                    const distanceSquared = dx * dx + dy * dy;
-                    const hitHead = distanceSquared < dummy.headRadius * dummy.headRadius;
-
-                    if (hitBody || hitHead) {
-                        this.handleSpellCollision(p, dummy);
-                        if (p.type !== 'earth') p.life = 0;
-                    } 
-                    
-                    else if (p.type === 'earth' && p.y + p.size >= GROUND_Y) {
-                        // Shatter earth particle on ground hit
-                        this.shatterParticle(p);
+                    if (this.checkCollision(p, this.dummy)) {
+                        this.handleSpellOnEntity(p, this.dummy);
                         p.life = 0;
                     }
+
+                    for (const boulder of this.boulders) {
+                        if (this.checkCollision(p, boulder)) {
+                            this.handleSpellOnEntity(p, boulder);
+                            p.life = 0;
+                            break;
+                        }
+                    }
+
+                    for (const tree of this.trees) {
+                        if (this.checkCollision(p, tree)) {
+                            this.handleSpellOnEntity(p, tree);
+                            p.life = 0;
+                            break;
+                        }
+                    }
+                    
                     return p.life > 0;
                 });
+
+                // Boulder vs Boulder collisions
+                for (let i = 0; i < this.boulders.length; i++) {
+                    const b1 = this.boulders[i];
+                    if (b1.isStuck) continue;
+
+                    if (b1.isWet && b1.y + b1.height >= GROUND_Y) {
+                        b1.isStuck = true;
+                        continue;
+                    }
+
+                    for (let j = i + 1; j < this.boulders.length; j++) {
+                        const b2 = this.boulders[j];
+                        
+                        if (this.checkCollision(b1, b2)) {
+                            if (b1.isWet && b2.isStuck) {
+                                b1.isStuck = true;
+                                break; 
+                            }
+                            if (b2.isWet && b1.isStuck) {
+                                b2.isStuck = true;
+                                continue;
+                            }
+
+                            const vX = (b1.x + b1.width / 2) - (b2.x + b2.width / 2);
+                            const vY = (b1.y + b1.height / 2) - (b2.y + b2.height / 2);
+                            const combinedHalfWidths = (b1.width + b2.width) / 2;
+                            const combinedHalfHeights = (b1.height + b2.height) / 2;
+                            
+                            if (Math.abs(vX) < combinedHalfWidths && Math.abs(vY) < combinedHalfHeights) {
+                                const oX = combinedHalfWidths - Math.abs(vX);
+                                const oY = combinedHalfHeights - Math.abs(vY);
+                                if (oX >= oY) {
+                                    if (vY > 0) {
+                                        b1.y += oY;
+                                    } else {
+                                        b1.y -= oY;
+                                    }
+                                    const tempVy = b1.vy;
+                                    b1.vy = b2.vy * 0.8;
+                                    b2.vy = tempVy * 0.8;
+                                } else {
+                                    if (vX > 0) {
+                                        b1.x += oX;
+                                    } else {
+                                        b1.x -= oX;
+                                    }
+                                    const tempVx = b1.vx;
+                                    b1.vx = b2.vx * 0.8;
+                                    b2.vx = tempVx * 0.8;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Boulder vs Dummy collision
+                this.boulders = this.boulders.filter(boulder => {
+                    if (!boulder.isStuck && this.checkCollision(boulder, this.dummy)) {
+                        this.dummy.takeDamage(25);
+                        this.dummy.applyKnockback(boulder.vx * 0.5, boulder.vy * 0.5 - 5);
+                        return false; // Boulder is destroyed
+                    }
+                    return true;
+                });
+
+                // Tree to Dummy fire spread
+                for (const tree of this.trees) {
+                    if (tree.isBurning && this.dummy.saturation <= 0 && !this.dummy.isBurning) {
+                        if (this.checkCollision(tree, this.dummy)) {
+                            this.dummy.isBurning = true;
+                        }
+                    }
+                }
             }
 
-            handleSpellCollision(particle, entity) {
-                entity.takeDamage(particle.damage);
+            checkCollision(objA, objB) {
+                return objA.x < objB.x + objB.width &&
+                       objA.x + objA.width > objB.x &&
+                       objA.y < objB.y + objB.height &&
+                       objA.y + objA.height > objB.y;
+            }
+
+            handleSpellOnEntity(particle, entity) {
                 
                 switch(particle.type) {
                     case 'water':
                         entity.applyKnockback(particle.vx * 0.02, particle.vy * 0.02);
-                        entity.saturation = Math.min(100, entity.saturation + 5);
-                        if (entity.isBurning) {
-                            // Extinguish fire particles
-                            entity.fireParticles.splice(0, 5);
-                            if (entity.fireParticles.length === 0) {
-                                entity.isBurning = false;
+                        if (entity instanceof Boulder || entity instanceof Dummy) {
+                            entity.isWet = true;
+                            entity.wetTimer = 0;
+                            if (entity instanceof Dummy) {
+                                entity.saturation = Math.min(100, (entity.saturation || 0) + 5);
+                                if (entity.isBurning) {
+                                    entity.fireParticles.splice(0, 5);
+                                    if (entity.fireParticles.length === 0) entity.isBurning = false;
+                                }
                             }
+                        } else if (entity instanceof Tree) {
+                            entity.extinguish();
                         }
                         break;
                     case 'fire':
-                        if (entity.saturation <= 0) { // Can't catch fire if wet
+                        entity.takeDamage(particle.damage);
+                        if (entity instanceof Dummy && entity.saturation <= 0) {
                            entity.isBurning = true;
+                        } else if (entity instanceof Tree) {
+                           entity.catchFire();
                         }
                         break;
-                    case 'earth':
-                        entity.applyKnockback(particle.vx * 0.5, particle.vy * 0.5 - 5);
-                        this.shatterParticle(particle);
-                        particle.life = 0;
-                        break;
                     case 'air':
-                        entity.applyKnockback(particle.vx * 0.2, particle.vy * 0.2);
+                        entity.takeDamage(particle.damage);
+                        let knockbackMultiplier = (entity instanceof Boulder) ? 0.8 : 0.5;
+                        entity.applyKnockback(particle.vx * knockbackMultiplier, particle.vy * knockbackMultiplier);
                         break;
                 }
             }
-
-            shatterParticle(particle) {
-                for (let i = 0; i < 5; i++) {
-                    const vx = (Math.random() - 0.5) * 5 + particle.vx * 0.2;
-                    const vy = (Math.random() - 0.5) * 5 - 3;
-                    this.particles.push(new Particle(particle.x, particle.y, vx, vy, 50, '#A0522D', 5, GRAVITY, 'splinter'));
+            
+            spreadFire(burningTree) {
+                for (const otherTree of this.trees) {
+                    if (otherTree === burningTree) continue;
+                    const dx = otherTree.x - burningTree.x;
+                    const dy = otherTree.y - burningTree.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    if (distance < 100) { // Fire spread range
+                        otherTree.catchFire();
+                    }
                 }
             }
 
             draw(ctx) {
+                const skyColor = this.getCurrentSkyColor();
+                ctx.fillStyle = skyColor;
+                ctx.fillRect(0, 0, this.width, this.height);
+
                 ctx.save();
                 ctx.translate(-this.camera.x, -this.camera.y);
                 
-                // Draw world objects
                 ctx.fillStyle = '#2c522c';
-                ctx.fillRect(this.camera.x - 1000, GROUND_Y, this.width + 2000, GAME_HEIGHT - GROUND_Y);
+                ctx.fillRect(this.camera.x - 2000, GROUND_Y, this.width + 4000, GAME_HEIGHT - GROUND_Y);
                 this.obelisk.draw(ctx);
+                this.trees.forEach(tree => tree.draw(ctx));
                 this.entities.forEach(entity => entity.draw(ctx));
+                this.boulders.forEach(boulder => boulder.draw(ctx));
                 this.particles.forEach(p => p.draw(ctx));
                 
                 ctx.restore();
 
-                // Draw UI elements (fixed on screen)
                 this.drawUI(ctx);
             }
 
             drawUI(ctx) {
-                // Player Health Bar
                 const barWidth = 200;
                 const barHeight = 20;
                 ctx.fillStyle = '#333';
@@ -632,6 +914,43 @@
                 ctx.fillStyle = 'white';
                 ctx.font = '12px "Courier New"';
                 ctx.fillText(`${this.player.health}/${this.player.maxHealth}`, 15, 25);
+                
+                const timeString = this.getFormattedTime();
+                ctx.font = '16px "Press Start 2P"';
+                ctx.fillText(timeString, 220, 27);
+            }
+            
+            getFormattedTime() {
+                const totalMinutes = Math.floor(this.timeOfDay * 24 * 60);
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                const formattedHours = String(hours).padStart(2, '0');
+                const formattedMinutes = String(minutes).padStart(2, '0');
+                return `${formattedHours}:${formattedMinutes}`;
+            }
+
+            getCurrentSkyColor() {
+                const nightColor = { r: 44, g: 62, b: 80 };
+                const dayColor = { r: 135, g: 206, b: 235 };
+                const dawnStart = 5 / 24, dayStart = 7 / 24, duskStart = 19 / 24, nightStart = 21 / 24;
+                let r, g, b;
+
+                if (this.timeOfDay >= dawnStart && this.timeOfDay < dayStart) {
+                    const t = (this.timeOfDay - dawnStart) / (dayStart - dawnStart);
+                    r = Math.round(nightColor.r + (dayColor.r - nightColor.r) * t);
+                    g = Math.round(nightColor.g + (dayColor.g - nightColor.g) * t);
+                    b = Math.round(nightColor.b + (dayColor.b - nightColor.b) * t);
+                } else if (this.timeOfDay >= dayStart && this.timeOfDay < duskStart) {
+                    r = dayColor.r; g = dayColor.g; b = dayColor.b;
+                } else if (this.timeOfDay >= duskStart && this.timeOfDay < nightStart) {
+                    const t = (this.timeOfDay - duskStart) / (nightStart - duskStart);
+                    r = Math.round(dayColor.r + (nightColor.r - dayColor.r) * t);
+                    g = Math.round(dayColor.g + (nightColor.g - nightColor.g) * t);
+                    b = Math.round(dayColor.b + (nightColor.b - nightColor.b) * t);
+                } else {
+                    r = nightColor.r; g = nightColor.g; b = nightColor.b;
+                }
+                return `rgb(${r}, ${g}, ${b})`;
             }
 
             setGameState(newState) {
@@ -645,7 +964,7 @@
                     gameOverScreen.style.display = 'none';
                 }
                 if (newState === 'PLAYING') {
-                    this.init(); // Reset the game
+                    this.init();
                     titleScreen.style.display = 'none';
                     controlsDiv.classList.remove('hidden');
                 }
@@ -655,10 +974,10 @@
         // --- Main Game Logic ---
         let game = new Game(GAME_WIDTH, GAME_HEIGHT);
 
-        function animate() {
+        function animate(timestamp) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (game.gameState === 'PLAYING') {
-                game.update();
+                game.update(timestamp);
                 game.draw(ctx);
             }
             requestAnimationFrame(animate);
@@ -672,7 +991,7 @@
             game.setGameState('TITLE');
         });
 
-        animate();
+        requestAnimationFrame(animate);
     </script>
 </body>
 </html>
