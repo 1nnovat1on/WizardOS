@@ -77,6 +77,18 @@ const document = {
 };
 let raf;
 const win = element("window");
+// Combat checks isolate the music transport; audio.cjs tests its real controller.
+win.WizardAudio = class {
+  constructor() {
+    this.volume = 0;
+  }
+  play() {}
+  pause() {}
+  setMuted() {}
+  setVolume(value) {
+    this.volume = value;
+  }
+};
 const sandbox = {
   document,
   window: win,

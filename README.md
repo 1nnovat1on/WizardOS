@@ -30,7 +30,7 @@ The title screen displays **WizardOS** and **Begin**. Encounters start after a s
 
 Meditation is available on the ground. The wizard sits cross-legged, stays stationary, and gathers mana inside a rotating rune circle. Release to stand. Casting, jumping, and shielding are disabled while meditating. Getting hit still causes damage.
 
-Portrait touch layouts reserve space beneath the arena for controls. Landscape layouts place controls over the lower corners. Movement and casting use independent pointer captures for simultaneous two-thumb input. Cancellation, focus loss, and pause clear held actions. Sound is optional and starts only after the sound button is selected.
+Portrait touch layouts reserve space beneath the arena for controls. Landscape layouts place controls over the lower corners. Movement and casting use independent pointer captures for simultaneous two-thumb input. Cancellation, focus loss, and pause clear held actions. The supplied **Wizardly Sound** soundtrack starts on Begin at 45% volume and loops. The sound button mutes music and effects; the volume slider adjusts both. Music pauses with the game, resumes at the same position, and restarts for a new journey. No music plays on the title screen.
 
 ## Element rules
 
@@ -45,7 +45,7 @@ These are starting balance values. Water is lightweight projectile-and-puddle si
 
 ## GitHub Pages
 
-The repository root remains a static site. Keep `index.html`, `style.css`, and `game.js` together. All asset references are relative, including under the `/WizardOS/` project path. The existing Pages branch/root configuration can continue to serve the game after the reviewed changes are merged into its publishing branch.
+The repository root remains a static site. Keep `index.html`, `style.css`, `audio.js`, `game.js`, and the `assets` directory together. All asset references are relative, including under the `/WizardOS/` project path. The existing Pages branch/root configuration can continue to serve the game after the reviewed changes are merged into its publishing branch.
 
 ## Validation
 
@@ -53,6 +53,7 @@ Run the dependency-free gameplay and input checks:
 
 ```sh
 node tests/combat.cjs
+node tests/audio.cjs
 ```
 
 These test spell interactions, mana, stationary meditation, enemy recharge, defeat/restart, and independent pointer input handling. They use a minimal DOM harness and do **not** substitute for real touch-device playtesting.
@@ -60,3 +61,7 @@ These test spell interactions, mana, stationary meditation, enemy recharge, defe
 An additional Playwright browser suite is provided in `tests/browser.cjs`. With Playwright and Chromium installed, serve the project on port 8000 and run it with `node tests/browser.cjs`. It checks the title, desktop movement, portrait/landscape layout, actual browser multitouch dispatch, and pause/restart. The initial development environment could not run that suite because its Chromium download was blocked; physical iOS/Android and browser visual testing remain outstanding.
 
 The optional `?debug=1` query exposes deterministic test hooks. Normal gameplay does not expose them.
+
+## Soundtrack asset
+
+`assets/wizardly-sound.mp3` is a 160 kbps web copy of the user-supplied 72-second `Wizardly Sound.wav`. The uploaded WAV is unchanged. Web Audio gain controls music volume on iPhone, and the audio graph is created from a user gesture. Playback failures are caught and expose a retry button. The track loops as provided; no claim of a seamless musical transition is made.

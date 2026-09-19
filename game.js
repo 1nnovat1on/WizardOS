@@ -43,8 +43,17 @@
     shake = 0,
     message = "",
     messageTime = 0;
-  let soundEnabled = false,
-    audioContext;
+  let soundEnabled = true,
+    audioContext,
+    musicNeedsRetry = false;
+  const soundtrack = new window.WizardAudio({
+    onError: () => {
+      musicNeedsRetry = true;
+      $("sound").textContent = "♪ RETRY";
+      $("sound").setAttribute("aria-label", "Retry sound");
+      tell("MUSIC COULD NOT START · TAP ♪ TO RETRY", 5);
+    },
+  });
   try {
     best = Number(localStorage.getItem("wizardos-best")) || 0;
   } catch {}
@@ -97,10 +106,10 @@
     messageTime = t;
   }
   function tone(type) {
-    if (!soundEnabled) return;
+    if (!soundEnabled || soundtrack.volume === 0) return;
     try {
-      audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
-      audioContext.resume();
+      audioContext ||= soundtrack.getContext();
+      audioContext.resume().catch(() => {});
       const o = audioContext.createOscillator(),
         g = audioContext.createGain();
       o.type = type === "earth" ? "triangle" : "sine";
@@ -113,7 +122,10 @@
         f * 0.4,
         audioContext.currentTime + 0.18,
       );
-      g.gain.setValueAtTime(0.035, audioContext.currentTime);
+      g.gain.setValueAtTime(
+        Math.max(0.0001, 0.035 * soundtrack.volume),
+        audioContext.currentTime,
+      );
       g.gain.exponentialRampToValueAtTime(
         0.001,
         audioContext.currentTime + 0.22,
@@ -173,8 +185,10 @@
     camera = player.x - width * 0.36;
     tell("WALK THE WILDS · HOLD E / CHARGE TO RESTORE ARCANA", 5);
     accumulator = 0;
+    soundtrack.play(true);
   }
   function showScreen(dead = false) {
+    soundtrack.pause();
     clearInput();
     state = dead ? "dead" : "paused";
     $("overlay").hidden = false;
@@ -197,21 +211,27 @@
       $("overlay").hidden = true;
       $("game").classList.remove("paused");
       accumulator = 0;
+      soundtrack.play();
     }
   }
   $("begin").onclick = () => (state === "paused" ? pause() : start());
   $("restart").onclick = start;
   $("pause").onclick = pause;
   $("sound").onclick = () => {
-    soundEnabled = !soundEnabled;
+    soundEnabled = musicNeedsRetry ? true : !soundEnabled;
+    musicNeedsRetry = false;
+    soundtrack.setMuted(!soundEnabled);
     $("sound").textContent = soundEnabled ? "♪ ON" : "♪ OFF";
     $("sound").setAttribute("aria-pressed", String(soundEnabled));
     $("sound").setAttribute(
       "aria-label",
-      soundEnabled ? "Disable sound" : "Enable sound",
+      soundEnabled ? "Mute sound" : "Enable sound",
     );
     tone("charge");
   };
+  $("volume").addEventListener("input", (event) => {
+    soundtrack.setVolume(Number(event.target.value) / 100);
+  });
   document
     .querySelectorAll("[data-element]")
     .forEach((b) => (b.onclick = () => choose(b.dataset.element)));

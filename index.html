@@ -13,6 +13,7 @@
     />
     <title>WizardOS — The Elemental Wilds</title>
     <link rel="stylesheet" href="./style.css" />
+    <script src="./audio.js" defer></script>
     <script src="./game.js" defer></script>
   </head>
   <body>
@@ -40,9 +41,19 @@
           ><strong id="score">0 VANQUISHED</strong>
         </div>
         <div class="utilities">
-          <button id="sound" aria-label="Enable sound" aria-pressed="false">
-            ♪ OFF</button
+          <button id="sound" aria-label="Mute sound" aria-pressed="true">
+            ♪ ON</button
           ><button id="pause" aria-label="Pause game">Ⅱ</button>
+          <label class="volume-control" for="volume"
+            ><span>VOL</span
+            ><input
+              id="volume"
+              type="range"
+              min="0"
+              max="100"
+              value="45"
+              aria-label="Sound volume"
+          /></label>
         </div>
       </header>
       <div id="status" role="status" hidden>THE WILDS ARE QUIET</div>

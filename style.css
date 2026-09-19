@@ -586,3 +586,30 @@ h1 span {
     transition: none;
   }
 }
+
+/* Place volume below the existing buttons without widening the mobile HUD. */
+.utilities {
+  position: relative;
+}
+.volume-control {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--panel);
+  border: 1px solid #d4bd8333;
+  color: var(--gold);
+  font:
+    8px Arial,
+    sans-serif;
+}
+.volume-control input {
+  width: 65px;
+  height: 30px;
+  margin: 0;
+  accent-color: var(--gold);
+  touch-action: none;
+}
