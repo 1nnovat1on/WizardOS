@@ -1,0 +1,580 @@
+:root {
+  color-scheme: dark;
+  --ink: #edf0df;
+  --gold: #d4bd83;
+  --panel: rgba(15, 29, 35, 0.86);
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #101b23;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+body {
+  overscroll-behavior: none;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+button:focus-visible {
+  outline: 2px solid #f8df9d;
+  outline-offset: 4px;
+}
+[hidden] {
+  display: none !important;
+}
+#game {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  min-height: 280px;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+#stage {
+  position: absolute;
+  inset: 0;
+}
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+#hud {
+  position: absolute;
+  inset: 24px 28px auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+  gap: 20px;
+}
+.eyebrow {
+  font:
+    10px/1.5 Arial,
+    sans-serif;
+  letter-spacing: 3px;
+  color: var(--gold);
+}
+.vitals {
+  width: 210px;
+  padding: 15px 18px;
+  background: linear-gradient(110deg, var(--panel), rgba(15, 29, 35, 0.2));
+  border-left: 1px solid #bba16f88;
+}
+.vitals .eyebrow {
+  margin-bottom: 9px;
+}
+.meter-line {
+  display: flex;
+  justify-content: space-between;
+  font:
+    8px Arial,
+    sans-serif;
+  letter-spacing: 2px;
+  margin: 9px 0 5px;
+  color: #cdd7cd;
+}
+.meter {
+  height: 4px;
+  background: #ffffff15;
+  width: 100%;
+}
+.meter i {
+  display: block;
+  background: #d29381;
+  width: 100%;
+  height: 100%;
+  transition: width 0.08s;
+}
+.meter.mana i {
+  background: #80ccda;
+}
+.journey {
+  padding: 17px;
+  text-align: center;
+}
+.journey strong {
+  display: block;
+  margin-top: 9px;
+  font:
+    10px Arial,
+    sans-serif;
+  letter-spacing: 2px;
+}
+.utilities {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.utilities button {
+  background: var(--panel);
+  border: 1px solid #d4bd8333;
+  padding: 10px 12px;
+  font:
+    11px Arial,
+    sans-serif;
+  min-height: 40px;
+}
+#status {
+  position: absolute;
+  top: 157px;
+  left: 46px;
+  font:
+    9px Arial,
+    sans-serif;
+  letter-spacing: 1.5px;
+  color: #d7d7ba;
+  text-shadow: 0 2px 4px #000;
+  pointer-events: none;
+}
+#controls {
+  position: absolute;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+.element-bar {
+  display: flex;
+  gap: 8px;
+}
+.element-bar button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid #d4bd832d;
+  border-radius: 3px;
+  padding: 10px 17px;
+  font:
+    9px Arial,
+    sans-serif;
+  letter-spacing: 1.5px;
+  min-width: 110px;
+  min-height: 48px;
+}
+.element-bar button[aria-pressed="true"] {
+  border-color: var(--element);
+  box-shadow: inset 0 -2px var(--element);
+  background: #24363ce8;
+}
+.sigil {
+  font:
+    25px Georgia,
+    serif;
+  color: var(--element);
+}
+kbd {
+  font:
+    9px Arial,
+    sans-serif;
+  opacity: 0.45;
+  margin-left: 4px;
+}
+.desktop-hint {
+  font:
+    9px Arial,
+    sans-serif;
+  letter-spacing: 1px;
+  color: #e8dfc6;
+  margin: 14px 0 0;
+}
+.desktop-hint span {
+  color: #93a6a6;
+  margin: 0 18px 0 3px;
+}
+#touchDeck {
+  display: none;
+}
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  background: linear-gradient(
+    90deg,
+    rgba(9, 20, 29, 0.91),
+    rgba(9, 20, 29, 0.65) 35%,
+    rgba(9, 20, 29, 0.08) 80%
+  );
+}
+.title-content {
+  margin: 0 0 4vh 10vw;
+  max-width: 540px;
+}
+.crest {
+  font-size: 56px;
+  line-height: 1;
+  color: var(--gold);
+  margin-bottom: 26px;
+}
+h1 {
+  font-size: clamp(60px, 8.5vw, 126px);
+  letter-spacing: -5px;
+  font-weight: 400;
+  line-height: 1.1;
+  margin: 16px 0 20px;
+}
+h1 span {
+  color: var(--gold);
+}
+#screenDescription {
+  font-size: 19px;
+  line-height: 1.8;
+  color: #b8c9c8;
+  margin-bottom: 34px;
+}
+.primary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 80px;
+  background: #caba91;
+  color: #182a30;
+  border: 1px solid #f1dfb6;
+  padding: 17px 26px;
+  font:
+    13px Arial,
+    sans-serif;
+  letter-spacing: 2px;
+  min-width: 210px;
+  box-shadow: 0 0 35px #d4bd8314;
+}
+.primary:hover {
+  background: #e4d3ab;
+}
+.primary span {
+  font-size: 22px;
+}
+.secondary {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #a8b8ac55;
+  margin-top: 18px;
+  padding: 8px 0;
+  color: #bac6b8;
+}
+#screenHint {
+  font:
+    11px/1.9 Arial,
+    sans-serif;
+  letter-spacing: 1px;
+  color: #a7b8b8;
+  margin-top: 25px;
+}
+#screenHint span {
+  color: #829394;
+}
+.title-footer {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 4%;
+  right: 4%;
+  display: flex;
+  justify-content: space-between;
+  font:
+    9px Arial,
+    sans-serif;
+  letter-spacing: 2px;
+  color: #b1b8a3;
+  gap: 10px;
+}
+.paused #overlay {
+  background: #0b1b24bd;
+  backdrop-filter: blur(5px);
+}
+.paused .title-content {
+  margin: auto;
+  text-align: center;
+}
+.paused .primary {
+  margin: auto;
+}
+.paused h1 {
+  font-size: 65px;
+  letter-spacing: -2px;
+}
+.paused .crest {
+  display: none;
+}
+@media (pointer: coarse), (max-width: 760px) {
+  #stage {
+    bottom: 178px;
+  }
+  #hud {
+    inset: max(10px, env(safe-area-inset-top)) 12px auto;
+    gap: 6px;
+  }
+  .vitals {
+    width: 150px;
+    padding: 10px 12px;
+  }
+  .vitals .eyebrow {
+    font-size: 8px;
+    letter-spacing: 1.7px;
+    margin-bottom: 4px;
+  }
+  .journey {
+    padding: 10px 2px;
+  }
+  .journey .eyebrow {
+    display: none;
+  }
+  .journey strong {
+    font-size: 8px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .utilities {
+    gap: 4px;
+  }
+  .utilities button {
+    padding: 9px;
+    font-size: 10px;
+    min-width: 38px;
+  }
+  #status {
+    left: 24px;
+    top: 123px;
+    font-size: 8px;
+    max-width: calc(100% - 42px);
+  }
+  #controls {
+    bottom: 0;
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+    background: linear-gradient(#102129ed, #0c1921);
+    border-top: 1px solid #bda56a33;
+    height: 178px;
+    justify-content: space-between;
+  }
+  .element-bar {
+    gap: 5px;
+    justify-content: center;
+    width: 100%;
+    max-width: 460px;
+  }
+  .element-bar button {
+    min-width: 0;
+    flex: 1;
+    justify-content: center;
+    padding: 5px 9px;
+    min-height: 42px;
+    gap: 6px;
+    font-size: 8px;
+  }
+  .sigil {
+    font-size: 21px;
+  }
+  kbd,
+  .desktop-hint {
+    display: none;
+  }
+  #touchDeck {
+    display: flex;
+    width: 100%;
+    max-width: 530px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .stick {
+    width: 83px;
+    height: 83px;
+    border: 1px solid #aebdaa55;
+    border-radius: 50%;
+    position: relative;
+    background: radial-gradient(#647b7b16, #0e242a);
+    flex-shrink: 0;
+    touch-action: none;
+  }
+  .stick i {
+    position: absolute;
+    left: 25px;
+    top: 25px;
+    width: 31px;
+    height: 31px;
+    border: 1px solid #c5d9ca66;
+    border-radius: 50%;
+    background: #768e8544;
+    pointer-events: none;
+  }
+  .stick span {
+    position: absolute;
+    bottom: 8px;
+    width: 100%;
+    text-align: center;
+    font:
+      7px Arial,
+      sans-serif;
+    letter-spacing: 1px;
+    color: #a7bdb8;
+  }
+  .cast {
+    border-color: #c6b48099;
+  }
+  .cast i {
+    background: #c6b48033;
+    border-color: #c6b480aa;
+  }
+  .touch-actions {
+    display: flex;
+    gap: 5px;
+  }
+  .touch-actions button {
+    width: 47px;
+    height: 60px;
+    background: #1b3036;
+    border: 1px solid #b7c4af33;
+    border-radius: 7px;
+    font-size: 24px;
+  }
+  .touch-actions button.active {
+    border-color: #d4bd83;
+    background: #395255;
+  }
+  .touch-actions small {
+    display: block;
+    font:
+      7px Arial,
+      sans-serif;
+    letter-spacing: 0.5px;
+    margin-top: 5px;
+  }
+  .title-content {
+    margin: 0 8vw 40px;
+  }
+  .crest {
+    font-size: 40px;
+    margin-bottom: 17px;
+  }
+  h1 {
+    font-size: clamp(62px, 13vw, 96px);
+    letter-spacing: -3px;
+  }
+  #screenDescription {
+    font-size: 16px;
+    margin-bottom: 25px;
+  }
+  .title-footer {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  #screenHint {
+    font-size: 9px;
+  }
+  .title-content .eyebrow {
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+  body:has(#hud[hidden]) #stage {
+    bottom: 0;
+  }
+}
+@media (pointer: coarse) and (orientation: landscape),
+  (max-width: 760px) and (orientation: landscape) {
+  #stage {
+    bottom: 0;
+  }
+  #controls {
+    background: none;
+    border: 0;
+    height: 100px;
+    padding: 0 22px 9px;
+    pointer-events: none;
+  }
+  .element-bar {
+    position: absolute;
+    bottom: 15px;
+    width: 280px;
+    pointer-events: auto;
+  }
+  .element-bar button {
+    padding: 5px;
+    gap: 4px;
+    font-size: 7px;
+  }
+  .element-bar .sigil {
+    font-size: 18px;
+  }
+  #touchDeck {
+    max-width: none;
+    width: 100%;
+    pointer-events: none;
+  }
+  .stick,
+  .touch-actions {
+    pointer-events: auto;
+  }
+  .touch-actions {
+    position: absolute;
+    right: 117px;
+    bottom: 65px;
+  }
+  .touch-actions button {
+    height: 43px;
+    width: 44px;
+    font-size: 17px;
+  }
+  .touch-actions small {
+    font-size: 6px;
+    margin: 2px 0;
+  }
+  .stick {
+    width: 76px;
+    height: 76px;
+  }
+  .stick i {
+    left: 22px;
+    top: 22px;
+  }
+  .title-content {
+    margin: 0 7vw;
+  }
+  .crest,
+  #screenHint {
+    display: none;
+  }
+  h1 {
+    font-size: 70px;
+    margin: 8px 0;
+  }
+  #screenDescription {
+    font-size: 14px;
+    line-height: 1.4;
+    margin: 10px 0 18px;
+  }
+  .primary {
+    padding: 10px 20px;
+  }
+  .title-footer {
+    bottom: 12px;
+  }
+  #status {
+    top: 112px;
+  }
+  .vitals {
+    padding: 7px 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter i {
+    transition: none;
+  }
+}
